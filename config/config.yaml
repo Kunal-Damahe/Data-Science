@@ -1,0 +1,9 @@
+training_pipeline_config:
+  pipeline_name: network_security
+  artifact_dir: artifacts
+
+data_ingestion_config:
+  database_name: network_security
+  collection_name: network_data
+  data_file_path: artifacts/data_ingestion/feature_store/network_data.csv
+  fallback_csv_path: data/network_data.csv
