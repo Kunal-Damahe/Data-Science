@@ -6,13 +6,14 @@ import os
 import shutil
 from pathlib import Path
 from typing import Optional
+from uuid import uuid4
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, HttpUrl
 
 from config import get_settings
 from ingestion.video_processor import VideoProcessor
-from orchestration.graph import build_graph
+from orchestration.graph import build_graph, retriever
 from rag.vector_store import ComplianceVectorStore
 
 settings = get_settings()
@@ -51,10 +52,11 @@ def health() -> dict:
 
 @app.post("/rules/build-index")
 def build_rules_index(rule_file_path: Optional[str] = None) -> dict:
-    """Build FAISS index from compliance rules text file."""
+    """Build FAISS index from compliance rules text file and refresh the retriever."""
 
     path = Path(rule_file_path) if rule_file_path else None
     ComplianceVectorStore().build_index(path)
+    retriever.refresh()
     return {"status": "index_built", "path": str(settings.vector_store_dir)}
 
 
@@ -65,7 +67,11 @@ async def analyze_uploaded_video(file: UploadFile = File(...)) -> AnalyzeRespons
     if not file.filename:
         raise HTTPException(status_code=400, detail="Uploaded file must have a name.")
 
-    destination = settings.upload_dir / file.filename
+    safe_name = Path(file.filename).name
+    if not safe_name or safe_name in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Uploaded file has an invalid name.")
+
+    destination = settings.upload_dir / f"{uuid4().hex}_{safe_name}"
     with destination.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
